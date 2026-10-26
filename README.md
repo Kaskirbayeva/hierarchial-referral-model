@@ -1,4 +1,4 @@
-# Predicting hospital referral destinations in Kazakhstan with hierarchical machine learning
+# A Hierarchical Machine Learning Framework for Predicting Hospital Referral Destinations in Kazakhstan
 
 This repository contains the analytical code accompanying a study that developed and temporally validated machine learning models to predict the destination of inter-hospital referrals in Kazakhstan, using national Hospital Episode Statistics (HES) for 2022 and 2023. Starting from analysis-ready cohorts, it provides the complete modelling pipeline – four prediction models, together with the code that produces all tables and figures reported in the manuscript – and an interactive Shiny prototype illustrating how model predictions could be integrated into referral decision-making.
 

@@ -1,47 +1,67 @@
 # Predicting hospital referral destinations in Kazakhstan with hierarchical machine learning
 
-Code for the study on predicting the destination of inter-hospital referrals in Kazakhstan's
-national Hospital Episode Statistics (HES), 2022–2023. Starting from analysis-ready cohorts, the
-repository contains the full modelling pipeline (four prediction models, all manuscript tables and
-figures) and an interactive Shiny decision-support prototype.
+This repository contains the analytical code accompanying a study that developed and temporally validated machine learning models to predict the destination of inter-hospital referrals in Kazakhstan, using national Hospital Episode Statistics (HES) for 2022 and 2023. Starting from analysis-ready cohorts, it provides the complete modelling pipeline – four prediction models, together with the code that produces all tables and figures reported in the manuscript – and an interactive Shiny prototype illustrating how model predictions could be integrated into referral decision-making.
 
-> **Data note.** The HES data are confidential and are **not** included. The repository ships with
-> **synthetic data** that have the same structure as the analytical data sets, so every script and
-> the Shiny app can be run end to end. Results obtained on the synthetic data are for demonstration
-> only and say nothing about the real study (see [Synthetic data](#synthetic-data)).
+> **Data availability.** The HES data are confidential and are not distributed with this repository. To allow the code to be executed end to end, the repository includes **synthetic data** that reproduce the structure of the analytical data sets (variable names, types and category labels) but not the associations within them. Results obtained from the synthetic data are illustrative only and should not be interpreted as findings of the study (see [Synthetic data](#synthetic-data)).
 
-## Study design in brief
+## Study design
 
-- **Unit of analysis:** hospital referral episode (referring facility ≠ accepting facility), public facilities only.
-- **Outcome:** level of the accepting facility – City, Regional, Republican/National, Rural/District, Specialised.
-- **Predictors:** information available to the referring clinician before the referral decision –
-  patient characteristics, diagnosis at referral (ICD-10), admission day and month, surgery type,
-  referring facility level and region, and regional health-system capacity and economic indicators.
-  Characteristics of the accepting facility are excluded.
-- **Validation:** temporal. 2022 January–September = training; 2022 October–December = internal
-  validation; 2023 = external validation.
-- **Models**
-  1. *Naive baseline* – the most common historical destination for each referring facility level.
-  2. *Flat random forest* – direct five-class classification.
-  3. *Hierarchical random forest* and 4. *hierarchical CatBoost*, following the referral system:
+**Setting and population.** The HES database covers all inpatient admissions to hospitals nationwide. A referral was defined as an admission in which the patient was referred from one healthcare facility to a different facility; records in which the referring and receiving facilities were the same were excluded. Admissions to private facilities were also excluded, as private providers operate under referral pathways distinct from those of public facilities and are not subject to the same regional planning arrangements. The unit of analysis was the hospital referral episode. Data from 2022 and 2023 were used to reflect referral behaviour under the current financing arrangements following the introduction of Mandatory Social Health Insurance (MSHI) in 2020 and the disruption associated with the COVID-19 pandemic.
+
+**Outcome.** The outcome was the level of the accepting facility, grouped into five categories: city, regional, republican/national, rural/district and specialised.
+
+**Predictors.** Predictors were restricted to information available to the referring clinician before the referral decision:
+
+- **Patient characteristics:** age, sex, area of residence, employment status and MSHI benefit category.
+- **Admission characteristics:** surgery type, and day of week and month of admission.
+- **Clinical diagnosis** recorded at referral (ICD-10).
+- **Referring facility:** level and region.
+
+Characteristics of potential accepting facilities were not included, as they are related to the referral outcome and could introduce information available only after, or as part of, the referral decision. Instead, regional indicators of health-system capacity (doctors and hospital beds per 10,000 population) and of economic context (average wage, unemployment rate, population and gross regional product per capita) were included.
+
+**Temporal validation.** Rather than splitting the data randomly, the 2022 cohort was divided chronologically:
+
+- admissions from January to September formed the **training** set;
+- admissions from October to December were used for **internal temporal validation**;
+- the 2023 cohort served as an **external temporal validation** set.
+
+This approach is consistent with TRIPOD recommendations for clinical prediction models.
+
+## Models
+
+Four models were compared:
+
+1. **Naive baseline** – a simple approximation of current referral practice that predicts, for each referring facility level, the most common historical destination in the training data, without accounting for patient or clinical characteristics.
+2. **Flat random forest (RF)** – direct classification of referrals into the five destination categories.
+3. **Hierarchical RF** and 4. **Hierarchical CatBoost** – two algorithms applied within a three-stage framework reflecting the structure of the referral system, which distinguishes destinations reimbursed through diagnosis-related groups (DRG) from those reimbursed through other payment methods:
 
 ```
-                     Referral destination
-                              |
-        Stage 1: DRG-funded vs non-DRG-funded (class-weighted)
-                 |                              |
-   Stage 2: City vs Regional      Stage 3: Republican/National vs
-                                  Rural/District vs Specialised
+                         Referral destination
+                                  |
+       Stage 1: DRG-funded vs non-DRG-funded (inverse-frequency class weights)
+                 |                                      |
+   Stage 2: City vs Regional              Stage 3: Republican/National vs
+                                          Rural/District vs Specialised
 ```
 
-  Final probabilities are P(stage-1 branch) × P(class | branch), computed for every episode from
-  the predicted stage-1 probabilities, so stage-1 errors propagate as they would in practice.
-- **Tuning:** grid search on a training subsample selected by balanced accuracy (RF: `mtry`,
-  minimum node size, sampling fraction, out-of-bag; CatBoost: iterations, depth, learning rate,
-  held-out split). RF uses 1,000 trees. The same hyperparameters are used in all three stages.
-- **Evaluation:** accuracy, balanced accuracy, macro precision/recall/F1 with 95% bootstrap CIs,
-  per-class recall, confusion matrices, stage-1 AUC, calibration, decision curve analysis,
-  regional variation and an outcome-concordance analysis (length of stay, complications).
+For each observation, the probability of each final destination was obtained by multiplying the stage 1 probability by the corresponding stage 2 or stage 3 conditional probability. These probabilities were computed for every observation irrespective of its actual destination, so that errors at the first stage propagate to the final prediction, as they would in practice; the actual destination was never used to select the second- or third-stage model.
+
+RF and CatBoost were chosen because both are tree-based ensemble methods that capture non-linear relationships and interactions without prespecified functional forms and are more interpretable than deep learning approaches. They represent two distinct ensemble strategies (bagging and gradient boosting), which allowed us to assess whether the benefits of the hierarchical approach were consistent across algorithms. CatBoost also handles categorical predictors natively, which is advantageous given the high cardinality of variables such as diagnosis and referring region.
+
+**Hyperparameter tuning.** Hyperparameters were selected by grid search on a subsample of the training data, using balanced accuracy as the selection criterion:
+
+- **RF:** number of variables considered at each split, minimum terminal node size and sampling fraction, evaluated on out-of-bag predictions.
+- **CatBoost:** number of iterations, tree depth and learning rate, evaluated on a held-out validation set within the training subsample.
+
+The best-performing configuration was refitted to the full training data; RF models used 1,000 trees. The same hyperparameters were applied at all three stages, so that differences in performance between stages reflect the underlying classification task.
+
+## Evaluation
+
+- **Discrimination:** accuracy, balanced accuracy and macro-averaged precision, recall and F1-score, with 95% bootstrap confidence intervals; per-category recall and confusion matrices; and, for the stage 1 classifier, the area under the receiver operating characteristic curve.
+- **Calibration:** calibration of the stage 1 probability and of the combined hierarchical probability for rural/district referrals.
+- **Clinical utility:** decision curve analysis on the external validation cohort, assessing net benefit for referral to a non-DRG-funded facility and for identification of rural/district referrals, compared with referring all patients, referring none and the naive baseline.
+- **Regional variation:** model performance by referring region.
+- **Outcome concordance:** length of stay and in-hospital complication rates compared between referrals whose actual destination matched the model's top-ranked prediction and those that did not, overall, for high-confidence predictions and stratified by ICD-10 chapter. This retrospective analysis is hypothesis-generating and does not imply a causal effect of model-concordant referral on patient outcomes.
 
 ## Repository structure
 

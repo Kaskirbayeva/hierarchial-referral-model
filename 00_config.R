@@ -3,10 +3,6 @@
 #
 # Referral pathway prediction (Kazakhstan HES, 2022-2023)
 #
-# This is the ONLY file you should need to edit before running
-# the pipeline. Every numbered script sources it automatically
-# (if it has not been loaded yet), so each script can be run on
-# its own as well as from 00_main.R.
 ############################################################
 
 # ---------------------------------------------------------
@@ -14,9 +10,7 @@
 # ---------------------------------------------------------
 
 # Folder that contains all the pipeline scripts (the repository
-# root). By default this is the current working directory - open
-# referral-pathway-ml.Rproj in RStudio, or setwd() to the repo.
-project_dir <- getwd()
+# root). By default this is the current working directory
 
 CFG <- list(
 
@@ -26,7 +20,7 @@ CFG <- list(
   # One file per year, one row per referral episode, with the
   # variables described in docs/data_dictionary.md. The repository
   # ships SYNTHETIC data; to use other data with the same structure,
-  # point these paths to your own files (never commit them).
+  # point these paths to your own files 
   data_files = c(
     "2022" = "data/synthetic/df_model_22_synthetic.rds",
     "2023" = "data/synthetic/df_model_23_synthetic.rds"
@@ -35,7 +29,7 @@ CFG <- list(
   # ---------------------------------------------------------
   # 3. ANALYSIS SETTINGS
   # ---------------------------------------------------------
-  seed         = 20260818,
+  seed = 20260818,
 
   # Temporal split of 2022: months 1..train_last_month = training,
   # later months = internal temporal validation; 2023 = external.
@@ -56,7 +50,7 @@ CFG <- list(
   # Bootstrap for 95% CIs in Table 4
   n_boot = 1000,
 
-  # Hierarchical model used for the regional map (Figure 6),
+  # Hierarchical model
   # and outcome-concordance analysis:
   # "Hierarchical RF" or "Hierarchical CatBoost"
   analysis_model = "Hierarchical RF",
@@ -77,12 +71,7 @@ drg_classes     <- c("City", "Regional")
 non_drg_classes <- c("Republican/National", "Rural/District", "Specialised")
 
 # Predictors: information available to the referring clinician
-# before the referral decision. EXCLUDED on purpose:
-#   accepting-facility attributes (accept_region, accept_ownership,
-#   accept_urban, accept_level) - post-decision / outcome-related;
-#   icd3 (final/discharge diagnosis) - leakage;
-#   age_cat, gender - redundant;
-#   los, complications - reserved for the concordance analysis.
+# before the referral decision.
 predictor_vars <- c(
   "age", "female", "residence", "employment_group", "employment_region",
   "benefit_group", "refer_level", "refer_region", "icd10_ref", "sur_type",

@@ -115,8 +115,7 @@ or tables can be redrawn without refitting the models.
 ## Data availability
 
 The study used de-identified national HES data for 2022 and 2023. These data are confidential
-and are not shared; access requires approval from the data holder
-([DATA HOLDER / ACCESS PROCEDURE – to be completed]). The pipeline starts from analysis-ready
+and are not shared; access requires approval from the data holder. The pipeline starts from analysis-ready
 cohorts (one row per referral episode; see `docs/data_dictionary.md`). Users with approved access
 to data of the same structure can point `data_files` in `00_config.R` to their own files. Never
 commit such files: `.gitignore` excludes all data except `data/synthetic/`.

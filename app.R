@@ -1,44 +1,42 @@
 ############################################################
-# app.R - REFERRAL DESTINATION DECISION-SUPPORT PROTOTYPE
+# app.R - REFERRAL DESTINATION PLANNING / SCENARIO PROTOTYPE
 #
-# Proof-of-concept Shiny app (shadow mode) for the hierarchical
-# RF model. Asks only for information available to the referring
-# clinician at referral (patient characteristics, diagnosis,
-# admission and referring-facility details). Regional capacity
+# Proof-of-concept Shiny app for planners and service managers using
+# the main hierarchical RF (scripts 04 and 11b). Regional capacity
 # and economic indicators are auto-filled from the selected
 # region (2022 data used for model development).
 #
-# Predictions with top probability >= 70% are shown as a
-# recommendation; lower-confidence predictions are flagged for
-# manual review. The threshold is illustrative, not optimised.
-# NOT a validated clinical decision-support tool.
+# Probabilities are recalibrated using the internal validation period
+# before the illustrative 70% threshold is applied. This is a research
+# scenario tool, not a patient-level recommendation or validated CDS.
 #
 # Run after the pipeline (scripts 04 and 15):
-#   shiny::runApp()      # from the repository root
-# With the default synthetic data the predictions are for
-# demonstration only and carry no clinical meaning.
+#   shiny::runApp()   (from the repository root)
 ############################################################
 
 library(shiny)
 library(ranger)
+library(nnet)       # needed to apply the saved multinom recalibrator
 library(tidyverse)
 
 required_files <- c(
   "output/shiny/shiny_inputs.rds",
   "output/models/rf_stage1_drg_vs_nondrg.rds",
   "output/models/rf_stage2_city_vs_regional.rds",
-  "output/models/rf_stage3_nondrg.rds"
+  "output/models/rf_stage3_nondrg.rds",
+  "output/models/recalibration_hier_rf.rds"
 )
 missing_files <- required_files[!file.exists(required_files)]
 if (length(missing_files) > 0) {
   stop("Missing file(s): ", paste(missing_files, collapse = ", "),
-       ". Run 00_main.R (steps 04 and 15) first.")
+       ". Run 00_main.R (steps 04 and 20) first.")
 }
 
 shiny_inputs <- readRDS("output/shiny/shiny_inputs.rds")
 rf_stage1 <- readRDS("output/models/rf_stage1_drg_vs_nondrg.rds")
 rf_stage2 <- readRDS("output/models/rf_stage2_city_vs_regional.rds")
 rf_stage3 <- readRDS("output/models/rf_stage3_nondrg.rds")
+prob_recalibrator <- readRDS("output/models/recalibration_hier_rf.rds")
 
 category_levels      <- shiny_inputs$category_levels
 date_levels          <- shiny_inputs$date_factor_levels
@@ -56,14 +54,20 @@ predict_hierarchical <- function(newdata) {
     unname(p1[1, "NON_DRG"]) * p3[1, non_drg_classes]
   )
   names(prob) <- c("City", "Regional", non_drg_classes)
-  prob[class_order]
+  prob <- prob[class_order]
+  eps <- 1e-6
+  X <- matrix(log(pmin(pmax(prob, eps), 1)), nrow = 1)
+  colnames(X) <- paste0("lp", seq_along(class_order))
+  recal <- predict(prob_recalibrator, newdata = data.frame(X), type = "probs")
+  recal <- if (is.matrix(recal)) as.numeric(recal[1, class_order]) else as.numeric(recal[class_order])
+  setNames(recal / sum(recal), class_order)
 }
 
 ui <- fluidPage(
-  titlePanel("Referral Destination Decision-Support Prototype"),
+  titlePanel("Referral Destination Planning Scenario Prototype"),
   div(style = "background-color:#fff3cd; padding:10px; border-radius:5px; margin-bottom:15px;",
       strong("Prototype for research demonstration only. "),
-      "Not validated for clinical use. Final referral decisions remain the responsibility of the referring clinician."),
+      "For aggregate planning and research exploration only; not validated for individual clinical decisions."),
   sidebarLayout(
     sidebarPanel(
       h4("Patient characteristics"),
@@ -77,10 +81,10 @@ ui <- fluidPage(
       selectInput("refer_region", "Referring facility region", choices = category_levels$refer_region),
       selectizeInput("icd10_ref", "Diagnosis at referral (ICD-10 code)", choices = NULL,
                      options = list(placeholder = "Start typing a code...")),
-      selectInput("sur_type", "Surgery type", choices = category_levels$sur_type),
+      selectInput("sur_type", "Surgery type (suggested at referral)", choices = category_levels$sur_type),
       selectInput("admission_day_of_week", "Admission day of week", choices = date_levels$admission_day_of_week),
       selectInput("admission_month", "Admission month", choices = date_levels$admission_month),
-      actionButton("predict_btn", "Predict referral destination", class = "btn-primary")
+      actionButton("predict_btn", "Run scenario", class = "btn-primary")
     ),
     mainPanel(
       uiOutput("recommendation_box"),
@@ -131,9 +135,9 @@ server <- function(input, output, session) {
                 else "background-color:#f8d7da; padding:15px; border-radius:5px; border:1px solid #dc3545;",
         h3(paste("Predicted destination:", res$top_class)),
         p(strong("Confidence: "), sprintf("%.1f%%", 100 * res$top_prob)),
-        if (high) p(strong("High confidence"), " - shown as a recommendation.")
+        if (high) p(strong("High modeled confidence"), " - suitable for aggregate scenario summaries.")
         else p(strong(sprintf("Below the %.0f%% confidence threshold", 100 * CONFIDENCE_THRESHOLD)),
-               " - flagged for manual review."))
+               " - interpret cautiously in scenario summaries."))
   })
 
   output$prob_plot <- renderPlot({

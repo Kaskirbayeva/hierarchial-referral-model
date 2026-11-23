@@ -16,8 +16,8 @@ if (!exists("CFG")) source("00_config.R")
 library(patchwork)
 
 naive <- read_rds_out("preds", "pred_naive.rds")$external
-hrf   <- read_rds_out("preds", "pred_hier_rf.rds")$external
-hcb   <- read_rds_out("preds", "pred_hier_cb.rds")$external
+hrf   <- read_rds_out("preds", "pred_hier_rf_recalibrated.rds")
+hcb   <- read_rds_out("preds", "pred_hier_cb_recalibrated.rds")
 stopifnot(identical(naive$actual, hrf$actual), identical(hrf$actual, hcb$actual))
 
 dca_strategies <- c("Hierarchical RF", "Hierarchical CatBoost", "Naive baseline", "Refer all", "Refer none")
@@ -51,7 +51,11 @@ nb_at <- function(d, cut_points) {
 # --- 1. Non-DRG referral decision (Figure 8) -------------------
 y_nondrg <- as.integer(hrf$actual %in% non_drg_classes)
 thr1 <- seq(0.01, 0.50, by = 0.01)
-dca_nondrg <- run_dca(y_nondrg, hrf$stage1_p_nondrg, hcb$stage1_p_nondrg,
+# Stage 1 P(non-DRG), recalibrated (logistic intercept + slope fitted on
+# Oct-Dec 2022 in script 11b) - keeps Figure 8 a stage-1 decision curve.
+dca_nondrg <- run_dca(y_nondrg,
+                      hrf$stage1_p_nondrg_recal,
+                      hcb$stage1_p_nondrg_recal,
                       naive$pred %in% non_drg_classes, thr1)
 save_table(dca_nondrg, "dca_non_drg.csv")
 save_table(nb_at(dca_nondrg, c(0.05, 0.10, 0.15, 0.20, 0.30)), "dca_non_drg_summary.csv")
@@ -61,7 +65,7 @@ save_fig(fig8, "figure8_dca_non_drg.png", width = 9, height = 6.5)
 # --- 2. Rural/District identification ---------------------------
 y_rural <- as.integer(hrf$actual == "Rural/District")
 thr2 <- seq(0.005, 0.20, by = 0.005)
-dca_rural <- run_dca(y_rural, hrf[["Rural/District"]], hcb[["Rural/District"]],
+dca_rural <- run_dca(y_rural, hrf[["Rural/District_recal"]], hcb[["Rural/District_recal"]],
                      naive$pred == "Rural/District", thr2)
 save_table(dca_rural, "dca_rural_district.csv")
 save_table(nb_at(dca_rural, c(0.01, 0.02, 0.05, 0.10)), "dca_rural_district_summary.csv")

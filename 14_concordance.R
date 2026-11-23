@@ -17,17 +17,17 @@
 if (!exists("CFG")) source("00_config.R")
 library(patchwork)
 
-pred_file <- c("Hierarchical RF" = "pred_hier_rf.rds", "Hierarchical CatBoost" = "pred_hier_cb.rds")[[CFG$analysis_model]]
-d   <- read_rds_out("preds", pred_file)$external
+pred_file <- c("Hierarchical RF" = "pred_hier_rf_recalibrated.rds", "Hierarchical CatBoost" = "pred_hier_cb_recalibrated.rds")[[CFG$analysis_model]]
+d   <- read_rds_out("preds", pred_file)
 ext <- read_rds_out("data", "cohorts.rds")$df_extval_2023
 
 df_conc <- ext %>%
   select(los, complications, icd10_ref) %>%
   mutate(
-    predicted  = d$pred,
+    predicted  = d$pred_recalibrated,
     actual     = d$actual,
-    confidence = apply(as.matrix(d[, class_order]), 1, max),
-    concordant = factor(if_else(d$pred == d$actual, "Concordant", "Discordant"),
+    confidence = apply(as.matrix(d[, paste0(class_order, "_recal")]), 1, max),
+    concordant = factor(if_else(d$pred_recalibrated == d$actual, "Concordant", "Discordant"),
                         levels = c("Concordant", "Discordant")),
     chapter    = icd10_chapter(icd10_ref),   # "Not specified" kept as its own group
     high_conf  = confidence >= CFG$confidence_threshold

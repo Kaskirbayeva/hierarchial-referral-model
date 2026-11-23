@@ -35,8 +35,8 @@ target_share <- c(0.339, 0.524, 0.066, 0.007, 0.063)   # Table 1, accepting faci
 # ---- published marginal distributions (Table 1, 2022) -------------------
 p_refer_level <- c("City" = 6.4, "Polyclinic" = 51.2, "Regional" = 1.8,
                    "Republican/National" = 0.3, "Rural/District" = 40.1, "Specialised" = 0.1)
-p_refer_region <- c("Abai" = 1.5, "Akmola" = 4.5, "Aktobe" = 3.9, "Almaty City" = 0.05,
-                    "Almaty/Zhetisu" = 21.3, "Astana" = 10.9, "Atyrau" = 2.1, "East Kazakhstan" = 3.0,
+p_refer_region <- c("Abai" = 1.5, "Akmola" = 4.5, "Aktobe" = 3.9, "Almaty City" = 10.8,
+                    "Almaty/Zhetisu" = 10.5, "Astana" = 10.9, "Atyrau" = 2.1, "East Kazakhstan" = 3.0,
                     "Karaganda" = 4.4, "Kostanay" = 5.3, "Kyzylorda" = 5.0, "Mangystau" = 4.3,
                     "North Kazakhstan" = 5.1, "Pavlodar" = 5.6, "Shymkent" = 3.2, "Turkistan" = 7.8,
                     "Ulytau" = 0.7, "West Kazakhstan" = 4.9, "Zhambyl" = 6.4)
@@ -180,6 +180,16 @@ df_22 <- finish(cal, 2022)
 # 2023: same mechanism with small changes in practice (temporal drift)
 df_23 <- finish(simulate_cohort(n_2023, 2023), 2023,
                 shift = c(0, -0.05, 0.10, 0.05, 0.08))
+
+# Pseudonymised patient identifier: patients can have several episodes,
+# and about 57% of 2023 episodes come from patients seen in 2022
+# (in the study data, 42.7% of 2023 episodes were from new patients).
+ids_22 <- sprintf("P%07d", sample(seq_len(round(0.85 * n_2022)), n_2022, TRUE))
+df_22 <- df_22 %>% mutate(patient_id = ids_22, .before = 1)
+from_22 <- runif(n_2023) < 0.57
+df_23 <- df_23 %>% mutate(patient_id = if_else(from_22, sample(ids_22, n_2023, TRUE),
+                                               sprintf("P%07d", 2000000L + sample.int(n_2023, n_2023, TRUE))),
+                          .before = 1)
 
 dir.create("data/synthetic", recursive = TRUE, showWarnings = FALSE)
 saveRDS(df_22, "data/synthetic/df_model_22_synthetic.rds")

@@ -1,20 +1,20 @@
 # A Hierarchical Machine Learning Framework for Predicting Hospital Referral Destinations in Kazakhstan
 
-This repository contains the analytical code accompanying a study that developed and temporally validated machine learning models to predict the destination of inter-hospital referrals in Kazakhstan, using national Hospital Episode Statistics (HES) for 2022 and 2023. Starting from analysis-ready cohorts, it provides the complete modelling pipeline – six prediction models, together with the code that produces all tables and figures reported in the manuscript – and an interactive Shiny prototype illustrating how model predictions could be integrated into referral decision-making.
+This repository contains the analytical code accompanying a study that developed and temporally validated machine-learning models to predict the destinations of interhospital referrals in Kazakhstan using national Hospital Episode Statistics (HES) from 2022 and 2023. Starting with analysis-ready cohorts, the repository provides the complete modelling pipeline for six prediction models, the code used to produce all tables and figures reported in the manuscript, and an interactive Shiny prototype illustrating how model predictions could be integrated into referral decision-making.
 
-> **Data availability.** The HES data are confidential and are not distributed with this repository. To allow the code to be executed end to end, the repository includes **synthetic data** that reproduce the structure of the analytical data sets (variable names, types and category labels) but not the associations within them. Results obtained from the synthetic data are illustrative only and should not be interpreted as findings of the study (see [Synthetic data](#synthetic-data)).
+> **Data availability.** The HES data are confidential and are not distributed with this repository. To allow the code to be executed end to end, the repository includes **synthetic data** that reproduce the structure of the analytical datasets (variable names, types and category labels) but not the associations within them. Results obtained from the synthetic data are illustrative only and should not be interpreted as findings of the study (see [Synthetic data](#synthetic-data)).
 
 ## Study design
 
-**Setting and population.** The HES database covers all inpatient admissions to hospitals nationwide. A referral was defined as an admission in which the patient was referred from one healthcare facility to a different facility; records in which the referring and receiving facilities were the same were excluded. Admissions to private facilities were also excluded, as private providers operate under referral pathways distinct from those of public facilities and are not subject to the same regional planning arrangements. The unit of analysis was the hospital referral episode. Data from 2022 and 2023 were used to reflect referral behaviour under the current financing arrangements following the introduction of Mandatory Social Health Insurance (MSHI) in 2020 and the disruption associated with the COVID-19 pandemic.
+**Setting and population.** The HES database covers all inpatient admissions to hospitals nationwide. A referral was defined as an admission in which the patient was referred from one healthcare facility to a different facility. Records in which the referring and receiving facilities were the same were excluded. Admissions to private facilities were also excluded, as private providers operate under referral pathways distinct from those of public facilities and are not subject to the same regional planning arrangements. The unit of analysis was the hospital referral episode. Data from 2022 and 2023 were used to reflect referral behaviour under the current financing arrangements following the introduction of Mandatory Social Health Insurance (MSHI) in 2020 and the disruption associated with the COVID-19 pandemic.
 
 **Outcome.** The outcome was the level of the accepting facility, grouped into five categories: city, regional, republican/national, rural/district and specialised.
 
 **Predictors.** Predictors were restricted to information available to the referring clinician before the referral decision:
 
 - **Patient characteristics:** age, sex, area of residence, employment status and MSHI benefit category.
-- **Admission characteristics:** surgery type (the main operation and any additional operations proposed by the referring facility), and day of week and month of admission.
-- **Clinical diagnosis** recorded at referral (ICD-10), entered by the referring facility; a missing referral diagnosis is kept as its own category, "Not specified".
+- **Admission characteristics:** surgery type (the main operation and any additional operations proposed by the referring facility) and day of the week and month of admission.
+- **Clinical diagnosis** recorded at referral (ICD-10), entered by the referring facility; a referral diagnosis recorded as “Not specified” was retained as a separate category as its own category, "Not specified".
 - **Referring facility:** level and region.
 
 Characteristics of potential accepting facilities were not included, as they are related to the referral outcome and could introduce information available only after, or as part of, the referral decision. Instead, regional indicators of health-system capacity (doctors and hospital beds per 10,000 population) and of economic context (average wage, unemployment rate, population and gross regional product per capita) were included. Each indicator is a single 2022 value per region, also applied to 2023.
@@ -33,7 +33,7 @@ Six models were compared:
 
 1. **Naive baseline** – a simple approximation of current referral practice that predicts, for each referring facility level, the most common historical destination in the training data, without accounting for patient or clinical characteristics.
 2. **Flat random forest (RF)** – direct classification of referrals into the five destination categories, without class weights.
-3. **Weighted flat RF** and 4. **Weighted flat CatBoost** – flat five-class models with the same inverse-frequency class weights and tuned hyperparameters as the hierarchical models. They show how much of the hierarchical models' gain in minority-class recall comes from class weighting rather than from the hierarchy.
+3. **Weighted flat RF** and 4. **Weighted flat CatBoost** – flat five-class models with the same inverse-frequency class weights and tuned hyperparameters as the hierarchical models. These models help distinguish the contribution of class weighting from that of the hierarchical structure to minority-class recall.
 5. **Hierarchical RF** and 6. **Hierarchical CatBoost** – two algorithms applied within a three-stage framework reflecting the structure of the referral system, which distinguishes destinations reimbursed through diagnosis-related groups (DRG) from those reimbursed through other payment methods:
 
 ```
@@ -54,23 +54,23 @@ RF and CatBoost were chosen because both are tree-based ensemble methods that ca
 - **RF:** number of variables considered at each split, minimum terminal node size and sampling fraction, evaluated on out-of-bag predictions.
 - **CatBoost:** number of iterations, tree depth and learning rate, evaluated on a held-out validation set within the training subsample.
 
-The best-performing configuration was refitted to the full training data; RF models used 1,000 trees. The same hyperparameters were applied at all three stages, so that differences in performance between stages reflect the underlying classification task.
+The best-performing configuration was refitted to the full training data; RF models used 1,000 trees. The same hyperparameters were applied at all three stages to reduce the extent to which performance differences between stages were attributable to differences in tuning.
 
 ## Evaluation
 
-- **Discrimination:** accuracy, balanced accuracy and macro-averaged precision, recall and F1-score, with 95% bootstrap confidence intervals; per-category recall and precision and confusion matrices; class-specific AUCs and ROC curves.
+- **Discrimination:** accuracy, balanced accuracy and macro-averaged precision, recall and F1-score, with 95% bootstrap confidence intervals; per-category recall and precision, confusion matrices, and class-specific AUCs and ROC curves; class-specific AUCs and ROC curves.
 - **Precision–recall trade-off:** one-vs-rest precision–recall curves, average precision, and balanced accuracy compared at matched macro-precision (class probabilities reweighted to trace each model's operating points).
 - **Calibration and recalibration:** calibration of the stage 1 probability and of the combined hierarchical probability for rural/district referrals. Probabilities were recalibrated on the internal validation period (logistic recalibration for stage 1, multinomial logistic recalibration for the five destinations) and applied unchanged to 2023; decision curves, the concordance analysis, the volume analysis and the prototype use the recalibrated probabilities.
 - **Aggregate volumes (planning use):** predicted 2023 referral volumes (sum of recalibrated probabilities) compared with observed volumes, nationally and by referring region.
 - **Clinical utility:** decision curve analysis on the external validation cohort, assessing net benefit for referral to a non-DRG-funded facility and for identification of rural/district referrals, compared with referring all patients, referring none and the naive baseline.
-- **Regional variation:** model performance and referral concentration by referring region; share of "Not specified" referral diagnoses by region and referring level.
+- **Regional variation:** model performance and referral concentration by referring region; proportion of referral diagnoses recorded as "Not specified" referral diagnoses by region and referring level.
 - **Sensitivity analyses:** hierarchical models refitted without surgery type; performance among 2023 patients not present in the training data; obstetric versus non-obstetric referrals (ICD-10 chapter O of the referral diagnosis).
 - **Outcome concordance:** length of stay and in-hospital complication rates compared between referrals whose actual destination matched the model's top-ranked prediction and those that did not, overall, for high-confidence predictions and stratified by ICD-10 chapter. This retrospective analysis is hypothesis-generating and does not imply a causal effect of model-concordant referral on patient outcomes.
 
 ## Repository structure
 
 ```
-00_main.R                          runs the whole pipeline (switch steps on/off)
+00_main.R                          runs the whole pipeline (switches individual steps on or off)
 00_config.R                        settings: data files, seed, tuning grids, model for maps/concordance
 01_functions.R                     metrics, bootstrap CIs, hierarchical combination, calibration,
                                    recalibration, precision-recall, DCA, labels
@@ -101,10 +101,10 @@ app.R                              Shiny prototype (recalibrated hierarchical RF
 install_packages.R                 installs all required R packages
 data/synthetic/                    synthetic analysis-ready cohorts (.rds for the pipeline, .csv.gz for inspection)
 data-raw/                          script (and public regional indicators) that generated the synthetic cohorts
-docs/data_dictionary.md            variables in the analysis-ready data sets
+docs/data_dictionary.md            variables in the analysis-ready datasets
 ```
 
-All results are written to `output/` (`tables/`, `figures/`, `models/`, `predictions/`), which is not tracked by git.
+All results are written to `output/` (`tables/`, `figures/`, `models/`, `predictions/`).
 
 ## Quick start
 
@@ -118,7 +118,7 @@ All results are written to `output/` (`tables/`, `figures/`, `models/`, `predict
    source("00_main.R")
    ```
    With the default synthetic data the whole pipeline takes about 10 minutes on a laptop (the real data take several hours).
-3. Launch the prototype (after step 15 has run):
+3. Launch the prototype (after step 15 has been completed):
    ```r
    shiny::runApp()
    ```
@@ -188,7 +188,7 @@ lower ones are flagged for manual review (an illustrative, not optimised, thresh
 
 R 4.6.1; random forests with `ranger`, gradient boosting with `catboost`, ROC analysis with `pROC`,
 recalibration with `nnet`,
-data management and graphics with the `tidyverse`; maps with `sf` and `geokz`; app with `shiny`.
+data management and graphics with the `tidyverse`; maps with `sf` and `geokz`; application with `shiny`.
 Random seed: 20260818.
 
 ## Citation

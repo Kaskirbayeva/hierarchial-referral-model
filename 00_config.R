@@ -10,7 +10,9 @@
 # ---------------------------------------------------------
 
 # Folder that contains all the pipeline scripts (the repository
-# root). By default this is the current working directory
+# root). By default this is the current working directory - open
+# referral-pathway-ml.Rproj in RStudio, or setwd() to the repository.
+project_dir <- getwd()
 
 CFG <- list(
 
@@ -50,8 +52,8 @@ CFG <- list(
   # Bootstrap for 95% CIs in Table 4
   n_boot = 1000,
 
-  # Hierarchical model
-  # and outcome-concordance analysis:
+  # Hierarchical model used for the regional map (Figure 6),
+  # the Shiny prototype and the outcome-concordance analysis:
   # "Hierarchical RF" or "Hierarchical CatBoost"
   analysis_model = "Hierarchical RF",
 
@@ -59,7 +61,24 @@ CFG <- list(
   confidence_threshold = 0.70,
 
   # Concordance analysis: minimum stratum size reported
-  min_stratum_n = 100
+  min_stratum_n = 100,
+
+  # ---------------------------------------------------------
+  # 3b. ADDITIONAL ANALYSES (added in the revision)
+  # ---------------------------------------------------------
+  # Comparator models: weighted flat RF and weighted flat CatBoost are
+  # always fitted (same inverse-frequency class weights and tuned
+  # hyperparameters as the hierarchical models). Optionally also fit an
+  # unweighted flat CatBoost.
+  fit_unweighted_flat_catboost = FALSE,
+
+  # Sensitivity analysis without surgery type: also refit the
+  # hierarchical CatBoost (the hierarchical RF is always refitted).
+  sens_no_surgery_catboost = TRUE,
+
+  # Balanced accuracy at matched macro-precision: class-probability
+  # reweighting exponents used to trace each model's operating points
+  pr_alpha_grid = seq(-1, 1.5, by = 0.05)
 )
 
 # ---------------------------------------------------------
@@ -80,7 +99,8 @@ predictor_vars <- c(
   "admission_day_of_week", "admission_month"
 )
 
-model_names <- c("Naive baseline", "Flat RF", "Hierarchical RF", "Hierarchical CatBoost")
+model_names <- c("Naive baseline", "Flat RF", "Weighted flat RF", "Weighted flat CatBoost",
+                 "Flat CatBoost", "Hierarchical RF", "Hierarchical CatBoost")
 
 # ---------------------------------------------------------
 # 5. OUTPUT FOLDERS (created automatically)
@@ -105,7 +125,7 @@ out_path <- function(type, file) file.path(out_dirs[[type]], file)
 # 6. PACKAGES
 # ---------------------------------------------------------
 
-cran_packages <- c("tidyverse", "lubridate", "ranger",
+cran_packages <- c("tidyverse", "lubridate", "ranger", "nnet",
                    "pROC", "patchwork", "scales", "sf", "shiny", "remotes")
 missing_pkgs <- cran_packages[!cran_packages %in% rownames(installed.packages())]
 if (length(missing_pkgs) > 0) {

@@ -82,7 +82,7 @@ CFG <- list(
 )
 
 # ---------------------------------------------------------
-# 4. FIXED DEFINITIONS (do not change unless the study changes)
+# 4. FIXED DEFINITIONS 
 # ---------------------------------------------------------
 
 class_order     <- c("City", "Regional", "Republican/National", "Rural/District", "Specialised")
@@ -103,7 +103,7 @@ model_names <- c("Naive baseline", "Flat RF", "Weighted flat RF", "Weighted flat
                  "Flat CatBoost", "Hierarchical RF", "Hierarchical CatBoost")
 
 # ---------------------------------------------------------
-# 5. OUTPUT FOLDERS (created automatically)
+# 5. OUTPUT FOLDERS 
 # ---------------------------------------------------------
 
 if (dir.exists(project_dir)) setwd(project_dir)

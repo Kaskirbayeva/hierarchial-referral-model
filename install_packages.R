@@ -4,7 +4,7 @@
 
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 
-cran <- c("tidyverse", "lubridate", "ranger", "pROC",
+cran <- c("tidyverse", "lubridate", "ranger", "nnet", "pROC",
           "patchwork", "scales", "sf", "shiny", "remotes")
 missing <- cran[!cran %in% rownames(installed.packages())]
 if (length(missing) > 0) install.packages(missing)

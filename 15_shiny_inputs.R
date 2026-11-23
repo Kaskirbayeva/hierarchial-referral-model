@@ -9,7 +9,8 @@
 #     from the selected region
 #   - class order, non-DRG classes and the confidence threshold
 #
-# The app uses the hierarchical RF stage models in output/models.
+# The app uses the main hierarchical RF stage models (script 04) plus the
+# 2022-Q4 probability recalibrator (script 11b).
 ############################################################
 
 if (!exists("CFG")) source("00_config.R")
@@ -23,8 +24,8 @@ category_levels <- map(set_names(categorical_predictors), ~ sort(unique(as.chara
 regional_cols <- c("doctors_per10k", "beds_per10k", "wage", "employment_region",
                    "unemployment_rate", "log_population", "log_grp_pc", "log_investment_pc")
 
-# The regional indicators are attached to each episode by `region`;
-# take exactly the values the models were trained on.
+# The regional indicators are attached to each admission by `region`
+# during data preparation; take exactly the values the models were trained on.
 regional_lookup <- train_main %>%
   distinct(region, across(all_of(regional_cols))) %>%
   filter(!is.na(region))

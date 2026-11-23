@@ -20,7 +20,10 @@ library(geokz)
 
 coh <- read_rds_out("data", "cohorts.rds")
 pred_files <- c("Naive baseline" = "pred_naive.rds", "Flat RF" = "pred_flat_rf.rds",
+                "Weighted flat RF" = "pred_flat_rf_weighted.rds",
+                "Weighted flat CatBoost" = "pred_flat_cb_weighted.rds",
                 "Hierarchical RF" = "pred_hier_rf.rds", "Hierarchical CatBoost" = "pred_hier_cb.rds")
+pred_files <- pred_files[file.exists(out_path("preds", pred_files))]   # additional models, if fitted
 
 # --- balanced accuracy by referring region (all models) ---------
 # Recall is averaged over destinations present in that region.

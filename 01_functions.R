@@ -375,6 +375,9 @@ cohort_labels <- c(
 model_colours <- c(
   "Naive baseline"        = "#E45756",
   "Flat RF"               = "#9D9D9D",
+  "Weighted flat RF"      = "#59A14F",
+  "Weighted flat CatBoost"= "#B07AA1",
+  "Flat CatBoost"         = "#9C755F",
   "Hierarchical RF"       = "#4C72B0",
   "Hierarchical CatBoost" = "#DD8452",
   "Random Forest"         = "#4C72B0",
@@ -403,4 +406,106 @@ read_rds_out <- function(type, file) {
   path <- out_path(type, file)
   if (!file.exists(path)) stop("Missing ", path, " - run the earlier pipeline step that creates it.")
   readRDS(path)
+}
+
+
+############################################################
+# 6. HELPERS FOR THE ADDITIONAL ANALYSES (weighted flat models,
+#    precision-recall, recalibration, sensitivity analyses)
+############################################################
+
+# Fit a ranger model with the tuned flat-RF hyperparameters
+fit_rf_tuned <- function(data, target, best_params, weights = NULL, importance = "permutation") {
+  ranger::ranger(model_formula(target), data = data, num.trees = CFG$rf_final_trees,
+                 mtry = best_params$mtry, min.node.size = best_params$min_node_size,
+                 sample.fraction = best_params$sample_fraction,
+                 case.weights = weights, importance = importance, probability = TRUE,
+                 respect.unordered.factors = "order", seed = CFG$seed)
+}
+
+# Read every available prediction file into a named list
+read_all_preds <- function(include = model_names) {
+  files <- c("Naive baseline" = "pred_naive.rds", "Flat RF" = "pred_flat_rf.rds",
+             "Weighted flat RF" = "pred_flat_rf_weighted.rds",
+             "Weighted flat CatBoost" = "pred_flat_cb_weighted.rds",
+             "Flat CatBoost" = "pred_flat_cb.rds",
+             "Hierarchical RF" = "pred_hier_rf.rds", "Hierarchical CatBoost" = "pred_hier_cb.rds")
+  files <- files[names(files) %in% include]
+  files <- files[file.exists(out_path("preds", files))]
+  map(files, ~ readRDS(out_path("preds", .x)))
+}
+
+# Models that output a full probability matrix (not the naive baseline)
+has_probs <- function(d) all(class_order %in% names(d))
+
+prob_matrix <- function(d) as.matrix(d[, class_order])
+
+# Per-class precision and recall from actual / predicted
+per_class_pr <- function(actual, predicted) {
+  cm <- unclass(confusion(actual, predicted))
+  tibble(class = rownames(cm),
+         n_actual = as.integer(rowSums(cm)), n_predicted = as.integer(colSums(cm)),
+         recall = ifelse(rowSums(cm) == 0, NA_real_, diag(cm) / rowSums(cm)),
+         precision = ifelse(colSums(cm) == 0, NA_real_, diag(cm) / colSums(cm)))
+}
+
+# One-vs-rest precision-recall curve (thinned) and average precision
+pr_curve_ovr <- function(score, y, n_points = 400) {
+  o <- order(score, decreasing = TRUE)
+  y <- y[o]; s <- score[o]
+  tp <- cumsum(y); fp <- cumsum(1 - y)
+  last <- c(diff(s) != 0, TRUE)                 # keep one point per distinct threshold
+  tp <- tp[last]; fp <- fp[last]; thr <- s[last]
+  precision <- tp / (tp + fp); recall <- tp / sum(y)
+  ap <- sum(diff(c(0, recall)) * precision)     # step-wise average precision
+  keep <- unique(round(seq(1, length(recall), length.out = min(n_points, length(recall)))))
+  list(curve = tibble(threshold = thr[keep], recall = recall[keep], precision = precision[keep]),
+       ap = ap)
+}
+
+# Operating points: reweight class probabilities by w^alpha (w = inverse
+# training frequency) and classify by the largest reweighted probability.
+# alpha = 0 is the model as fitted; alpha > 0 favours rarer classes.
+operating_points <- function(prob, actual, w, alphas) {
+  map_dfr(alphas, function(a) {
+    adj  <- sweep(prob, 2, w[colnames(prob)]^a, `*`)
+    pred <- prob_to_class(adj, class_order)
+    m <- metrics_from_cm(unclass(confusion(actual, pred)))
+    tibble(alpha = a, balanced_accuracy = m[["balanced_accuracy"]],
+           macro_precision = m[["macro_precision"]], accuracy = m[["accuracy"]], macro_F1 = m[["macro_F1"]])
+  })
+}
+
+# Multinomial logistic recalibration ("matrix scaling" on log-probabilities):
+# fitted on one cohort, applied unchanged to another.
+fit_multiclass_recalibration <- function(prob, actual) {
+  eps <- 1e-6
+  X <- log(pmin(pmax(prob[, class_order], eps), 1))
+  colnames(X) <- paste0("lp", seq_along(class_order))
+  d <- data.frame(y = factor(actual, levels = class_order), X)
+  nnet::multinom(y ~ ., data = d, trace = FALSE, maxit = 500)
+}
+apply_multiclass_recalibration <- function(fit, prob) {
+  eps <- 1e-6
+  X <- log(pmin(pmax(prob[, class_order], eps), 1))
+  colnames(X) <- paste0("lp", seq_along(class_order))
+  p <- predict(fit, newdata = data.frame(X), type = "probs")
+  p <- as.matrix(p)[, class_order, drop = FALSE]
+  p / rowSums(p)
+}
+
+# Binary logistic recalibration of a single probability (intercept + slope)
+fit_binary_recalibration <- function(p, y) {
+  eps <- 1e-6
+  glm(y ~ lp, family = binomial(), data = data.frame(y = y, lp = qlogis(pmin(pmax(p, eps), 1 - eps))))
+}
+apply_binary_recalibration <- function(fit, p) {
+  eps <- 1e-6
+  as.numeric(predict(fit, newdata = data.frame(lp = qlogis(pmin(pmax(p, eps), 1 - eps))), type = "response"))
+}
+
+# Bootstrap CI for balanced accuracy only (fast) - used in subgroup analyses
+boot_ba <- function(actual, predicted, n_boot = 200, seed = CFG$seed) {
+  b <- bootstrap_metrics(actual, predicted, n_boot = n_boot, seed = seed)
+  b %>% filter(metric %in% c("accuracy", "balanced_accuracy", "macro_precision"))
 }

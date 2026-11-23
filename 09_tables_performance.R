@@ -6,7 +6,7 @@
 #            accuracy, balanced accuracy, macro precision,
 #            macro recall, macro-F1
 #   Confusion matrices for every model x cohort (+ figure)
-#   Table S2 / Figure S4  Stage 1 (DRG vs non-DRG) performance
+#   Stage 1 (DRG vs non-DRG) performance and ROC (supporting output)
 #            incl. AUC (95% DeLong CI) and ROC curves
 #
 # Uses only the saved predictions (scripts 03, 04, 06).
@@ -15,12 +15,14 @@
 if (!exists("CFG")) source("00_config.R")
 library(pROC)
 
-preds <- list(
-  "Naive baseline"        = read_rds_out("preds", "pred_naive.rds"),
-  "Flat RF"               = read_rds_out("preds", "pred_flat_rf.rds"),
-  "Hierarchical RF"       = read_rds_out("preds", "pred_hier_rf.rds"),
-  "Hierarchical CatBoost" = read_rds_out("preds", "pred_hier_cb.rds")
-)
+pred_files_all <- c("Naive baseline" = "pred_naive.rds", "Flat RF" = "pred_flat_rf.rds",
+                    "Weighted flat RF" = "pred_flat_rf_weighted.rds",
+                    "Weighted flat CatBoost" = "pred_flat_cb_weighted.rds",
+                    "Flat CatBoost" = "pred_flat_cb.rds",
+                    "Hierarchical RF" = "pred_hier_rf.rds", "Hierarchical CatBoost" = "pred_hier_cb.rds")
+# The weighted flat comparators (script 06b) are included when present
+pred_files_all <- pred_files_all[file.exists(out_path("preds", pred_files_all))]
+preds <- map(pred_files_all, ~ read_rds_out("preds", .x))
 combos <- expand_grid(model = names(preds), cohort = c("external", "internal"))
 
 
@@ -112,7 +114,7 @@ save_fig(cm_plot, "figure_confusion_matrices_hierarchical_external.png", width =
 
 
 ############################################################
-# TABLE S2 / FIGURE S4 - STAGE 1 (DRG vs NON-DRG) PERFORMANCE
+# STAGE 1 (DRG vs NON-DRG) PERFORMANCE AND ROC (supporting output)
 ############################################################
 
 stage1_models <- c("Hierarchical RF" = "Random Forest", "Hierarchical CatBoost" = "CatBoost")
@@ -134,7 +136,7 @@ stage1_tab <- pmap_dfr(expand_grid(model = names(stage1_models), cohort = c("int
            `AUC (95% CI)` = fmt_ci(ci[2], ci[1], ci[3]))
   })
 print(stage1_tab, width = Inf)
-save_table(stage1_tab, "tableS2_stage1_performance_auc.csv")
+save_table(stage1_tab, "stage1_performance_auc.csv")
 
 roc_df <- pmap_dfr(expand_grid(model = names(stage1_models), cohort = c("internal", "external")),
   function(model, cohort) {
@@ -160,7 +162,7 @@ roc_plot <- ggplot(roc_df, aes(fpr, tpr, colour = model)) +
   theme_ms() +
   labs(title = "Stage 1 ROC curves: non-DRG vs DRG-funded destination",
        x = "1 - specificity", y = "Sensitivity", colour = NULL)
-save_fig(roc_plot, "figureS4_stage1_roc.png", width = 11, height = 6)
+save_fig(roc_plot, "figure_stage1_roc.png", width = 11, height = 6)
 
 rm(preds); invisible(gc())
 cat("Step 09 complete.\n")
